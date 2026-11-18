@@ -1,0 +1,9 @@
+# Docker Compose deployment: default.yaml plus these settings.
+extends: default.yaml
+storage:
+  candle_backend: postgres          # TimescaleDB service from docker-compose.yml
+  event_log_dir: data/events
+bus:
+  backend: redis                    # engine also publishes alerts/snapshots to Redis channels
+api:
+  host: 0.0.0.0

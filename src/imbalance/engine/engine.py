@@ -33,6 +33,7 @@ class Ctx:
     session: SessionRules
     day: DayInfo
     regime: float | None
+    batch: dict | None = None       # all instruments' candles of the minute being closed
 
 
 class _StaticConfig:
@@ -106,6 +107,7 @@ class ScreenerEngine:
         """All instruments' candles for one minute, closed together."""
         self.last_close_ts = close_ts
         ctx = self.ctx(close_ts, close_ts)
+        ctx.batch = candles
         tokens = sorted(t for t in candles if t in self.trackers)
         for tok in tokens:
             tr = self.trackers[tok]
@@ -221,7 +223,9 @@ class ScreenerEngine:
         s = self.setups.get(setup_id)
         if s is None:
             return None
-        return {"setup": s.row(self.last_close_ts), "instrument": self.instrument_detail(s.token)}
+        trade = self.trades.trades.get(s.trade_id) if s.trade_id else None
+        return {"setup": s.row(self.last_close_ts), "instrument": self.instrument_detail(s.token),
+                "trade": trade.row() if trade else None}
 
     def instrument_detail(self, token: int) -> dict[str, Any] | None:
         tr = self.trackers.get(token)

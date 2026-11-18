@@ -178,6 +178,8 @@ def test_cash_futures_confirmation_same_and_adjacent_minute():
     events = run(processor([e, f]), se, sf, end="10:22:05")
     conf = {x.token: x for x in by(events, alert="S1_CONFIRMED")}
     assert conf[EQ_TOKEN].values["cash_fut"] and conf[FUT_TOKEN].values["cash_fut"]
+    basis = conf[FUT_TOKEN].values["basis"]                  # §6: recorded, not used in rules
+    assert basis["close_pct"] == pytest.approx(0.0, abs=0.05) and "change_bp" in basis
     # adjacent minute: the future surges one minute after the cash share
     se = surge1(script(EQ_TOKEN))
     se.candle("10:22", 100.60, 100.62, 100.55, 100.58, 0.5)

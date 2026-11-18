@@ -154,8 +154,9 @@ class Runtime:
             ev = self.processor.on_clock(now)
             if ev:
                 self._handle(ev)
-            if minute_of_day(now) >= shutdown and self.day.date <= _today(now):
+            if minute_of_day(now) >= shutdown or self.day.date < _today(now):
                 await self.finish(now)
+                self.request_stop()
                 return
 
     async def _snapshot_loop(self) -> None:

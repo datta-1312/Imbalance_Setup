@@ -66,6 +66,8 @@ class _Sym:
     drift: float = 0.0
     buy_p: float = 0.5
     oi_pct: float = 0.0
+    noise: float = 0.00011
+    mid: float = 0.0          # latent fair price; trades print at the quote around it
     phases: list[tuple[int, int, float, float, float, float]] = field(default_factory=list)  # (from_minute, ...)
     leader: "_Sym | None" = None
     basis: float = 0.0
@@ -91,7 +93,7 @@ class SyntheticMarket:
             b = r.uniform(*b_range) * (1.6 if inst.kind != Kind.EQ else 1.0)
             tick = inst.tick_size or (0.05 if price >= 100 else 0.01)
             v0 = int(b * 1e7 * 2.5 / price)
-            s = _Sym(inst=inst, rng=r, price=price, b_cr=b, tick=tick, v=v0, ct=v0 * price,
+            s = _Sym(inst=inst, rng=r, price=price, b_cr=b, tick=tick, v=v0, ct=v0 * price, mid=price,
                      oi=(int(r.uniform(2e6, 2e7)) if inst.is_future else None), prev_close=round(price * r.uniform(0.99, 1.01), 2),
                      day_open=price, day_high=price, day_low=price)
             s.bid, s.ask = price - tick, price + tick
@@ -102,6 +104,7 @@ class SyntheticMarket:
                 s.leader = self.syms[lt]
                 s.basis = s.rng.uniform(0.001, 0.004)
                 s.price = round(s.leader.price * (1 + s.basis), 2)
+                s.mid = s.price
                 s.prev_close = round(s.leader.prev_close * (1 + s.basis), 2)
                 s.day_open = s.day_high = s.day_low = s.price
                 s.v = int(s.b_cr * 1e7 * 2.5 / s.price)
@@ -164,6 +167,7 @@ class SyntheticMarket:
             drift = s.rng.gauss(0.0, 0.035)
             buy = min(0.62, max(0.38, s.rng.gauss(0.5, 0.04)))
             oi = s.rng.gauss(0.0, 0.03)
+        s.noise = 0.00005 if phase is not None else 0.00011
         s.target_cr = s.b_cr * prof * mult * math.exp(s.rng.gauss(0.0, noise_sigma) - noise_sigma ** 2 / 2)
         s.drift = drift
         s.buy_p = buy
@@ -178,20 +182,19 @@ class SyntheticMarket:
         per_sec = s.target_cr * 1e7 / 60.0 / max(self.rate, 1e-9)
         rupees = per_sec * r.uniform(0.6, 1.4)
         if s.leader is not None:
-            target_mid = s.leader.price * (1 + s.basis) + r.gauss(0.0, s.price * 0.00004)
-            mid = s.price + (target_mid - s.price) * 0.5
+            s.mid = s.leader.mid * (1 + s.basis) + r.gauss(0.0, s.mid * 0.00003)
         else:
-            mid = s.price * (1 + s.drift / 100.0 / 60.0 / self.rate) + r.gauss(0.0, s.price * 0.00011)
+            s.mid = s.mid * (1 + s.drift / 100.0 / 60.0 / self.rate) + r.gauss(0.0, s.mid * s.noise)
         buy = r.random() < s.buy_p
-        if buy:
-            ltp = max(self._round(s, mid + s.tick / 2), s.ask)
-        else:
-            ltp = min(self._round(s, mid - s.tick / 2), s.bid)
+        # Trade at the standing quote (so the quote rule classifies it), then
+        # re-quote around the latent mid: the side mix does not move the price.
+        ltp = s.ask if buy else s.bid
         dv = max(1, int(rupees / ltp))
         s.v += dv
         s.ct += dv * ltp
         s.price = ltp
-        s.bid, s.ask = round(ltp - s.tick, 4), round(ltp + s.tick, 4)
+        b = math.floor(s.mid / s.tick) * s.tick
+        s.bid, s.ask = round(b, 4), round(b + s.tick, 4)
         s.day_high = max(s.day_high, ltp)
         s.day_low = min(s.day_low, ltp)
         if s.oi is not None:

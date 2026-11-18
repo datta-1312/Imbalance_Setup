@@ -1,0 +1,45 @@
+# Production-style deployment on a small VM (Mumbai region recommended).
+#   cp .env.example .env   # fill in Kite and Telegram credentials
+#   docker compose up -d --build
+# Each morning log in at http://<host>:8000/kite/login (Kite access tokens expire daily).
+services:
+  screener:
+    build: .
+    command: ["imbalance", "--config", "config/compose.yaml", "--log-json", "live", "--daemon"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://imbalance:imbalance@db:5432/imbalance
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    ports:
+      - "8000:8000"
+    depends_on: [db, redis]
+    restart: unless-stopped
+
+  db:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_USER: imbalance
+      POSTGRES_PASSWORD: imbalance
+      POSTGRES_DB: imbalance
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+
+  # Synthetic market through the real engine, no broker needed:
+  #   docker compose --profile demo up --build demo   ->  http://localhost:8001
+  demo:
+    build: .
+    command: ["imbalance", "demo", "--host", "0.0.0.0", "--port", "8001", "--speed", "10"]
+    ports:
+      - "8001:8001"
+    profiles: ["demo"]
+
+volumes:
+  pgdata: {}

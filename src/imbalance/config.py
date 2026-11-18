@@ -407,13 +407,20 @@ def deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _read_yaml(path: Path) -> dict[str, Any]:
+def _read_yaml(path: Path, _depth: int = 0) -> dict[str, Any]:
+    """Read a YAML mapping. ``extends: other.yaml`` (relative to this file) merges
+    this file on top of another, e.g. a deployment file over default.yaml."""
     if not path.exists():
         return {}
     with path.open("r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
     if not isinstance(data, dict):
         raise ValueError(f"{path}: top level must be a mapping")
+    parent = data.pop("extends", None)
+    if parent:
+        if _depth > 5:
+            raise ValueError(f"{path}: 'extends' chain too deep")
+        data = deep_merge(_read_yaml(path.parent / parent, _depth + 1), data)
     return data
 
 

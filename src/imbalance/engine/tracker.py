@@ -84,6 +84,8 @@ class Setup:
     suppressed: str | None = None
     history: list[dict] = field(default_factory=list)
     last_close: float | None = None
+    book: dict[str, Any] = field(default_factory=dict)
+    basis: dict[str, Any] = field(default_factory=dict)
 
     # -- helpers -------------------------------------------------------------
     def real(self, x: float | None) -> float | None:
@@ -148,7 +150,7 @@ class Setup:
             "armed_ts": self.armed_ts, "entry_ts": self.entry_ts, "end_ts": self.end_ts,
             "end_reason": self.end_reason, "extended": self.extended, "plan": self.plan, "s2": self.s2,
             "trade_id": self.trade_id, "suppressed": self.suppressed, "checks": self.checks,
-            "history": self.history,
+            "history": self.history, "book": self.book, "basis": self.basis,
         }
 
 
@@ -440,12 +442,17 @@ class Tracker:
         # cash–futures confirmation (same or previous minute; next minute upgrades later)
         minutes = sorted({x.start for x in real_cs} | {real_cs[0].start - 60.0})
         s.cash_fut["s1"] = self.linked_confirms("s1", d, minutes)
+        # book pressure (supporting only) in the setup's direction
+        s.book = {"total_ratio": (win.total_buy_qty / win.total_sell_qty) if win.total_sell_qty else None,
+                  "depth5_ratio": (win.bid5_qty / win.ask5_qty) if win.ask5_qty else None}
+        s.basis = self._basis(c, ctx)
         grade = self._grade_s1(s, win, prev, ctx, oi_reading)
         s.grades["s1"] = grade
         vals = {"s1": {**s.real_ohlc(win.open, win.high, win.low, win.close), "turnover_cr": win.turnover_cr,
                        "window": k},
                 "metrics": full.metrics, "checks": full.checks_dicts(), "oi": s.oi.get("s1"),
-                "cash_fut": s.cash_fut["s1"], "grade_detail": grade, "tags": list(s.tags)}
+                "cash_fut": s.cash_fut["s1"], "grade_detail": grade, "tags": list(s.tags),
+                "book": s.book, "basis": s.basis}
         if p.event_day_mode == "require_a" and "event day" in s.tags and grade["grade"] != "A":
             return [self._event("transition", ctx.close_ts, s, from_state=State.IDLE.value,
                                 to_state=State.IDLE.value, reason=Reason.S1_REJECTED_GRADE.value,
@@ -561,6 +568,20 @@ class Tracker:
             s.pb_turnover_n += 1
             s.pb_vol += vc.volume
             s.pb_sell += vc.sell_vol
+
+    def _basis(self, c: Candle, ctx: "Ctx") -> dict[str, Any]:
+        """Futures premium over cash at the surge candle's open and close (§6:
+        recorded for later analysis, not used in v1 rules)."""
+        lt = self.inst.linked_token
+        other = (ctx.batch or {}).get(lt) if lt is not None else None
+        if other is None or self.inst.kind == Kind.IDX:
+            return {}
+        fut, cash = (c, other) if self.inst.is_future else (other, c)
+        if cash.open <= 0 or cash.close <= 0:
+            return {}
+        b_open = (fut.open - cash.open) / cash.open * 100.0
+        b_close = (fut.close - cash.close) / cash.close * 100.0
+        return {"open_pct": b_open, "close_pct": b_close, "change_bp": (b_close - b_open) * 100.0}
 
     def _oi_window(self, c: Candle, n: int) -> list[Candle]:
         """The ``n`` candles ending with ``c`` (``c`` is not yet in history)."""
