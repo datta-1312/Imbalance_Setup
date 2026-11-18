@@ -114,17 +114,31 @@ class Processor:
 
 
 def replay(processor: Processor, records: Iterable[Record], end_ts: float | None = None,
-           finish: bool = False) -> list[Event]:
-    """Drive a Processor from recorded data. The clock follows the recorded
-    receive times, so candle closes happen where they happened live."""
+           finish: bool = False, clock: str = "auto") -> list[Event]:
+    """Drive a Processor from recorded data.
+
+    ``clock="recorded"`` advances the clock only at recorded clock events (what
+    the live timer did), reproducing a live run exactly; ``clock="recv"``
+    advances it before every record using its receive time (scripted data);
+    ``"auto"`` picks "recorded" when the stream contains clock events.
+    """
+    records = list(records)
+    if clock == "auto":
+        clock = "recorded" if any(isinstance(r, FeedEvent) and r.kind == "clock" for r in records) else "recv"
     out: list[Event] = []
     last: float | None = None
     for r in records:
         t = record_time(r)
-        out += processor.on_clock(t)
         if isinstance(r, FeedEvent):
-            out += processor.on_feed_event(r.kind, r.ts)
+            if r.kind == "clock":
+                out += processor.on_clock(r.ts)
+            else:
+                if clock == "recv":
+                    out += processor.on_clock(t)
+                out += processor.on_feed_event(r.kind, r.ts)
         else:
+            if clock == "recv":
+                out += processor.on_clock(t)
             out += processor.on_tick(r)
         last = t
     if end_ts is None and last is not None:

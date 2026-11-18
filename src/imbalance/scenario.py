@@ -18,7 +18,7 @@ from .timeutil import at
 
 @dataclass(slots=True)
 class FeedEvent:
-    kind: str          # "disconnect" | "reconnect"
+    kind: str          # "disconnect" | "reconnect" | "clock" (a recorded clock advance)
     ts: float
     recv_ts: float
 

@@ -36,9 +36,11 @@ def ist_datetime(ts: float) -> datetime:
 
 @lru_cache(maxsize=4096)
 def parse_hhmm(value: str) -> int:
-    """'09:15' -> 555 (minutes after midnight)."""
-    hh, mm = value.strip().split(":")[:2]
-    h, m = int(hh), int(mm)
+    """'09:15' -> 555 (minutes after midnight). Seconds are not accepted."""
+    parts = value.strip().split(":")
+    if len(parts) != 2:
+        raise ValueError(f"expected HH:MM, got {value!r}")
+    h, m = int(parts[0]), int(parts[1])
     if not (0 <= h < 24 and 0 <= m < 60):
         raise ValueError(f"invalid time {value!r}")
     return h * 60 + m
@@ -54,8 +56,17 @@ def day_start(d: date) -> float:
 
 
 def at(d: date, hhmm: str | int, seconds: float = 0.0) -> float:
-    """Epoch for date ``d`` at IST clock time ``hhmm`` (string or minute of day)."""
-    m = parse_hhmm(hhmm) if isinstance(hhmm, str) else int(hhmm)
+    """Epoch for date ``d`` at IST clock time ``hhmm`` ("HH:MM", "HH:MM:SS" or a
+    minute of day), plus ``seconds``."""
+    if isinstance(hhmm, str):
+        parts = hhmm.strip().split(":")
+        m = parse_hhmm(":".join(parts[:2]))
+        if len(parts) == 3:
+            seconds += float(parts[2])
+        elif len(parts) != 2:
+            raise ValueError(f"expected HH:MM or HH:MM:SS, got {hhmm!r}")
+    else:
+        m = int(hhmm)
     return day_start(d) + m * 60 + seconds
 
 

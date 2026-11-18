@@ -323,7 +323,7 @@ class Tracker:
                     self.prov["S1"] = (c.start, d)
                     return [self._event("provisional", ts, None, reason=Reason.PROVISIONAL.value,
                                         alert=AlertType.S1_PROVISIONAL.value, provisional=True, direction=d,
-                                        values={"candle": fmt_hm(c.start), **ev.metrics,
+                                        values={"candle": fmt_hm(c.start), **ev.metrics, "ltp": c.close,
                                                 "checks": ev.checks_dicts()})]
             return []
         if s.state == State.ARMED:
@@ -495,8 +495,8 @@ class Tracker:
         s.L = s.low_since_h
         span = s.H - s.leg_start
         s.retracement = (s.H - s.L) / span if (s.L is not None and span > 0) else 0.0
-        if s.state in (State.PULLBACK, State.ARMED):
-            self._add_pullback_candle(s, vc)
+        if s.state == State.PULLBACK:
+            self._add_pullback_candle(s, vc)     # in ARMED, only once it is known not to be Surge 2
         if self.inst.is_future and s.state in (State.PULLBACK, State.ARMED) and s.oi_at_h and c.oi_close:
             dpct = (c.oi_close - s.oi_at_h) / s.oi_at_h * 100.0
             reading = rules.oi_reading_pullback(dpct, p)
@@ -525,6 +525,7 @@ class Tracker:
             if full2.passed:
                 return events + self._entry(c, vc, hist, s, full2, trigger, p, ctx)
             events += self._cancel_prov_s2(c, ctx, None, full2)
+            self._add_pullback_candle(s, vc)
 
         # 5. pullback start: lower high than H and a close below the previous close
         if s.state == State.SURGE_1 and not new_high and hist and vc.high < s.H and vc.close < hist[-1].close:
