@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Runtime data (recorded ticks, candles, event logs, secrets)
+data/*
+!data/reference/
+data/reference/*
+!data/reference/*.example.csv
+!data/reference/README.md
+config/local.yaml
+*.yaml.tmp
+.env
+
+# Dashboard
+dashboard/node_modules/
+dashboard/dist/

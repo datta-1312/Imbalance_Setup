@@ -1,0 +1,268 @@
+# Imbalance Setup Screener — configuration (source: spec §10 and §4).
+#
+# Every number in `params` is a DEFAULT starting value to be tuned by backtesting
+# (spec §11), not a proven setting. Edits to this file are picked up without a
+# restart (hot reload). The dashboard's parameter editor writes to
+# config/local.yaml, which is merged on top of this file.
+
+params:
+  # --- Surge 1 (§5.1) -------------------------------------------------------
+  surge_turnover_floor_cr: 4.0        # traded value inside one 1-min candle, ₹ crore
+  surge_rvol_min: 5.0                 # T / same-minute baseline B(m)
+  suddenness_multiple: 4.0            # T / mean of previous candles today
+  suddenness_lookback_candles: 10
+  suddenness_min_candles: 3           # fewer usable candles today -> rule fails
+  surge_window_candles: 1             # 1 or 2 consecutive candles judged together
+  surge_min_move_pct: 0.3             # close vs previous candle's close
+  close_in_top_pct: 30                # close in the top X% of the candle range
+  buy_share_min: 0.60
+  leg_start_lookback_candles: 5
+  opening_range_minutes: 15           # for the scored "break of opening-range high"
+  nifty_down_limit_pct: 0.5           # scored: NIFTY not down more than this
+
+  # --- Baseline (§3) -------------------------------------------------------
+  baseline_sessions: 20
+  baseline_smoothing_minutes: 2       # pooled median over m±2 minutes
+  baseline_min_sessions: 10           # fewer sessions -> instrument not scanned
+  baseline_floor_cr: 0.01             # B(m) never below ₹1 lakh (avoids /0)
+
+  # --- Pullback (§5.2) and invalidation (§5.4) ------------------------------
+  pullback_min_retrace: 0.25
+  pullback_max_retrace: 0.618
+  pullback_floor: s1_low              # s1_low | s1_midpoint (strict mode: S1 body midpoint)
+  pullback_max_turnover_ratio: 0.35   # mean pullback turnover / S1 turnover
+  pullback_min_candles: 3
+  pullback_max_sell_share_scored: 0.65
+  distribution_turnover_ratio: 0.60
+  distribution_sell_share_min: 0.60
+  trigger_lookback_candles: 3
+
+  # --- Surge 2 (§5.3) ------------------------------------------------------
+  s2_turnover_vs_s1: 0.60
+  s2_floor_cr: 3.0
+  s2_rvol_min: 3.0
+  entry_mode: close                   # close | buy_stop (one tick above S2 high)
+  buy_stop_valid_candles: 2
+  extended_atr_multiple: 0.5          # S2 close > H + 0.5 x ATR -> "extended"
+
+  # --- Expiry and cooldown (§5.5) ------------------------------------------
+  setup_expiry_minutes: 45
+  cooldown_minutes: 15
+
+  # --- Futures OI (§6) -------------------------------------------------------
+  oi_change_min_pct: 0.5
+  oi_window_candles: 3                # ΔOI measured over the 3 candles ending at the surge
+  oi_heavy_unwind_pct: 1.5            # pullback OI drop beyond this = "heavy" (warning)
+  short_buildup_turnover_ratio: 0.35  # "high turnover" for the short build-up invalidation
+
+  # --- Session windows (§4) --------------------------------------------------
+  no_signal_before: "09:20"           # first candle allowed to be Surge 1 starts here
+  last_surge1_time: "15:00"           # last Surge 1 candle starts before this time
+  last_entry_time: "15:05"            # last Surge 2 candle starts before this time
+
+  # --- Universe filters (§4) -------------------------------------------------
+  adtv_floor_cr: 25.0
+  price_band_proximity_pct: 1.0
+  stale_after_seconds: 30
+
+  # --- Risk and exits (§7) -------------------------------------------------
+  atr_period: 14
+  stop_mode: pullback_low             # pullback_low | s1_low (wide mode)
+  stop_buffer_atr: 0.25
+  min_risk_pct: 0.15
+  max_risk_pct: 1.2
+  capital: 1000000                    # ₹, used for position sizing and daily loss limit
+  risk_per_trade_pct: 0.5
+  max_position_value_x_capital: 2.0   # cap position value at this multiple of capital
+  t1_r: 1.5
+  t2_r: 3.0
+  t1_book_fraction: 0.5
+  t2_mode: target                     # target (exit rest at T2) | trail (no T2, trail only)
+  trail_candle_minutes: 3
+  time_stop_candles: 10
+  exit_warning_turnover_ratio: 0.60
+  exit_warning_sell_share_min: 0.60
+  max_daily_losses: 3
+  max_daily_loss_pct: 1.5
+  max_open_positions: 3
+
+  # --- Grade (§5.6) ----------------------------------------------------------
+  grade_a_min: 75
+  grade_b_min: 60
+
+  # --- Event filters (§4) ----------------------------------------------------
+  event_day_mode: tag                 # tag | suppress | require_a
+  rollover_sessions: 5                # last N sessions up to and including expiry
+  rollover_requires_cash_confirmation: true
+  scan_special_sessions: false        # e.g. Muhurat trading: build candles, no signals
+
+  # --- Direction ------------------------------------------------------------
+  short_setup_enabled: false          # §5.7 mirrored short setup
+  direction_mode: flow                # flow (estimated buy/sell split) | candle (candle shape only)
+
+# Named presets: partial overrides of `params`. Select with `active_preset`.
+presets:
+  conservative:
+    surge_rvol_min: 7.0
+    buy_share_min: 0.65
+    pullback_max_turnover_ratio: 0.30
+    s2_rvol_min: 4.0
+  aggressive:
+    surge_turnover_floor_cr: 3.0
+    surge_rvol_min: 3.5
+    suddenness_multiple: 3.0
+    s2_floor_cr: 2.0
+active_preset: null
+
+# Per-symbol overrides: "SYMBOL" applies to cash and futures, "SYMBOL:EQ" or
+# "SYMBOL:FUT" to one instrument. Applied after the active preset.
+symbol_overrides: {}
+#  RELIANCE:
+#    surge_turnover_floor_cr: 8.0
+#  "TATASTEEL:FUT":
+#    s2_floor_cr: 4.0
+
+# Exchange session timings (IST). They changed several times in 2025–26:
+# keep them here, never in code.
+session:
+  block_deal_1: ["08:45", "09:00"]
+  pre_open: ["09:00", "09:15"]          # cash and current-month futures
+  continuous_start: "09:15"
+  block_deal_2: ["14:05", "14:20"]
+  cash_continuous_end: "15:15"
+  cash_closing_auction: ["15:15", "15:35"]
+  futures_end: "15:40"
+  eod_exit_cash: "15:10"
+  eod_exit_fut: "15:25"
+  candle_close_grace_seconds: 1.5
+  startup_time: "08:30"
+  shutdown_time: "15:50"
+
+calendar:
+  weekend_days: [5, 6]                  # Saturday, Sunday (Monday = 0)
+  holidays: []                          # load the exchange holiday list, e.g. 2026-12-25
+  holidays_file: data/reference/holidays.csv   # optional: one ISO date per line
+  special_sessions: []
+  #  - {date: 2026-11-08, name: Muhurat, start: "18:00", end: "19:00"}
+  events_file: data/reference/events.csv       # date,symbol,type (results|board_meeting|ex_date|index_rebalance|fo_inclusion|fo_exclusion|halt)
+
+universe:
+  index_underlyings: [NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, NIFTYNXT50]
+  regime_underlyings: [NIFTY, BANKNIFTY]
+  ban_list_url: https://nsearchives.nseindia.com/content/fo/fo_secban.csv
+  ban_list_file: data/reference/fo_secban.csv
+  include_next_month_in_rollover: true
+  symbols_allowlist: []                 # empty = whole F&O universe
+
+broker:
+  adapter: kite                         # kite | replay | synthetic
+  kite:
+    api_key_env: KITE_API_KEY
+    api_secret_env: KITE_API_SECRET
+    session_file: data/secrets/kite_session.json
+    ws_url: wss://ws.kite.trade
+    api_root: https://api.kite.trade
+    login_url: https://kite.zerodha.com/connect/login
+    max_instruments_per_connection: 3000
+    max_connections: 3
+    futures_volume_unit: units          # units | lots (verify against your feed)
+    heartbeat_timeout_seconds: 5.0
+    reconnect_initial_delay_seconds: 1.0
+    reconnect_max_delay_seconds: 30.0
+    historical_requests_per_second: 3.0
+    quote_batch_size: 500
+
+alerts:
+  dedupe_window_seconds: 120
+  sounds: true
+  telegram:
+    enabled: false
+    bot_token_env: TELEGRAM_BOT_TOKEN
+    chat_id_env: TELEGRAM_CHAT_ID
+    api_base: https://api.telegram.org
+    alert_types: [S1_CONFIRMED, ARMED, S2_PROVISIONAL, ENTRY, T1, EXIT, EXIT_WARNING, SYSTEM]
+    min_grade: B
+    min_interval_seconds: 1.0
+
+storage:
+  data_dir: data
+  record_raw_ticks: true
+  raw_rotate_minutes: 10
+  raw_flush_seconds: 5.0
+  raw_compression: zstd
+  candle_backend: sqlite                # sqlite | postgres | none
+  sqlite_path: data/candles.sqlite
+  postgres_dsn_env: DATABASE_URL
+  event_log_dir: data/events
+  baseline_dir: data/baselines
+
+bus:
+  backend: memory                       # memory (single process) | redis
+  redis_url_env: REDIS_URL
+  channel_prefix: imbalance
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  static_dir: dashboard/dist
+  snapshot_interval_seconds: 1.0
+  auth_token_env: IMBALANCE_API_TOKEN   # if set, write endpoints require "Authorization: Bearer <token>"
+
+grading:
+  weights:
+    rvol: 18
+    buy_share: 14
+    vwap: 10
+    breakout: 5
+    oi: 14
+    cash_fut: 10
+    dryup: 14
+    pullback_sell: 5
+    regime: 5
+    book: 5
+  penalties:
+    block_window: 10
+    event_day: 10
+    index_event: 10
+    extended: 10
+    short_covering: 10
+    heavy_unwind: 5
+  rvol_full_multiple: 3.0               # RVOL component reaches 1.0 at 3x the rule minimum
+  buy_share_full: 0.85
+  book_pressure_full: 2.0
+
+backtest:
+  slippage_cash_pct: 0.05               # per side
+  slippage_fut_ticks: 1
+  slippage_fut_pct: 0.03
+  random_seed: 7
+  random_entries_per_signal: 3
+  # Placeholder cost table — confirm every rate against your broker's current
+  # contract note; STT and exchange charges were revised in recent years.
+  costs:
+    EQ:
+      brokerage_pct: 0.03
+      brokerage_max_per_order: 20.0
+      stt_buy_pct: 0.0
+      stt_sell_pct: 0.025
+      exchange_txn_pct: 0.00297
+      sebi_fee_pct: 0.0001
+      stamp_buy_pct: 0.003
+      gst_pct: 18.0
+    FUT:
+      brokerage_pct: 0.03
+      brokerage_max_per_order: 20.0
+      stt_buy_pct: 0.0
+      stt_sell_pct: 0.02
+      exchange_txn_pct: 0.00173
+      sebi_fee_pct: 0.0001
+      stamp_buy_pct: 0.002
+      gst_pct: 18.0
+  walk_forward:
+    train_months: 6
+    test_months: 2
+    min_trades: 20
+    grid:
+      surge_rvol_min: [4.0, 5.0, 7.0]
+      pullback_max_turnover_ratio: [0.30, 0.35, 0.45]
+      s2_turnover_vs_s1: [0.5, 0.6, 0.8]

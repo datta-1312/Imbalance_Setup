@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "imbalance-screener"
+version = "0.1.0"
+description = "Real-time NSE F&O imbalance-setup screener (alerts only, no order placement)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.7",
+  "pyyaml>=6",
+  "websockets>=12",
+  "httpx>=0.27",
+  "pyarrow>=16",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+redis = ["redis>=5"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+imbalance = "imbalance.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+  "perf: performance tests (scenario 15)",
+  "postgres: needs a local PostgreSQL server",
+  "redis: needs a local Redis server",
+]
